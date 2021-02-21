@@ -1,0 +1,10 @@
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+
+.vscode
+.DS_Store
+
+*/__pycache__
+
+python_topy/benchmark/iterations
