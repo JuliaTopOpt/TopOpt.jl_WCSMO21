@@ -15,7 +15,7 @@ for k = 1:nelz
                         x y z+hx; x y-hx z+hx; x+hx y-hx z+hx; x+hx y z+hx];
                 % ? y-z axis swapped
                 vert(:,[2 3]) = vert(:,[3 2]); 
-                vert(:,2,:) = -vert(:,2,:);
+                % vert(:,2,:) = -vert(:,2,:);
                 patch('Faces',face,'Vertices',vert,'FaceColor',...
                 [0.2+0.8*(1-rho(j,i,k)),0.2+0.8*(1-rho(j,i,k)),0.2+0.8*(1-rho(j,i,k))]);
                 hold on;
@@ -27,13 +27,11 @@ end
 for s=1:size(loadnid,1)
 %     node_id = fix(load_dofs(s)/3)+1;
     node_id = loadnid(s);
-    [i,j,k] = nodeid2xyz(node_id, nelx, nely, 0);
-    x = (i+0)*hx;
-    y = (j+0)*hy;
-    z = (k+0)*hz;
-    % hardcode load vector for now
-    fprintf("Load | nodeid %d, (%d, %d, %d), x: %f, y: %f, z: %f\n", node_id, i,j,k, x, y, z)
-    quiver3(x,y,z,0,-1.0,0,'r','LineWidth',1);
+    [xx,yy,zz] = nodeid2xyz(node_id, nelx, nely);
+    xcoord = [xx,yy,zz] .* [hx, hy, hz];
+    % fprintf("Load | nodeid %d, x: %f, y: %f, z: %f\n", node_id, xcoord(1), xcoord(3), xcoord(2))
+    % TODO hardcode load vector for now
+    quiver3(xcoord(1), xcoord(3), xcoord(2), 0,0,-1,'r','LineWidth',1);
     hold on;
 end
 % draw fixities vector
@@ -46,17 +44,12 @@ for s=1:size(fixednid,1)
 %     fix_vec(dir_id) = 1;
 %     node_id = fix(fixeddof(s)/3)+1;
     node_id = fixednid(s);
-    [i,j,k] = nodeid2xyz(node_id, nelx, nely, 0);
-    x = (i)*hx;
-    y = (j)*hy;
-    z = (k-1)*hz;
-    if x > 0
-        fprintf("Fix | nodeid %d, (%d, %d, %d), x: %f, y: %f, z: %f\n", node_id, i,j,k, x, y, z)
-    end
+    [xx, yy, zz] = nodeid2xyz(node_id, nelx, nely);
+    xcoord = [xx, yy, zz] .* [hx, hy, hz];
 %     quiver3(x,y,z,fix_vec(1),fix_vec(2),fix_vec(3),'b','LineWidth',4);
     vec = eye(3);
     for t=1:3
-        quiver3(x,y,z,vec(t,1),vec(t,2),vec(t,3),'b','LineWidth',4);
+        quiver3(xcoord(1), xcoord(3), xcoord(2),vec(t,1),vec(t,2),vec(t,3),'b','LineWidth',4);
         hold on;    
     end
 end
