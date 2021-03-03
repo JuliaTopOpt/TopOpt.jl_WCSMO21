@@ -3,10 +3,10 @@
 % https://link.springer.com/article/10.1007%252Fs00158-014-1107-x
 % ------
 % * TopOpt.jl comparison
-% With minor modifications from Yijiang Huang (yijiangh@mit.edu)
+% With modifications from Yijiang Huang (yijiangh@mit.edu)
 % TODO
-% MMA, OC, fmincon
-% density & sensitivity filter
+% - MMA, OC, fmincon
+% - density & sensitivity filter
 
 % run_top3d(20, 10, 2, 0.3, 3.0, 2.0)
 % run_top3d(6, 4, 2, 0.3, 3.0, 2.0)
@@ -17,15 +17,18 @@ clc
 % record time
 tic
 
-% For MMA code
+% load MMA code
 addpath('GGP-Matlab')
 
-nelx = 4;
-nely = 1;
-nelz = 2;
+nelx = 20;
+nely = 10;
+nelz = 6;
 volfrac = 0.3;
 penal = 3.0;
 rmin = 2.0;
+
+optimizer = 'OC'; % 'MMA', 'fmincon'
+filter_type = 'density'; % 'sensitivity'
 
 % USER-DEFINED LOOP PARAMETERS
 maxloop = 200;    % Maximum number of iterations
@@ -34,8 +37,8 @@ displayflag = 0;  % Display intermediate structure flag
 
 % USER-DEFINED MATERIAL PROPERTIES
 E0 = 1.0;         % Young's modulus of solid material
-Emin = 1e-9;      % Young's modulus of void-like material
-% Emin = 0.001;      % Young's modulus of void-like material
+% Young's modulus of void-like material
+Emin = 1e-9; % 0.001
 nu = 0.3;         % Poisson's ratio
 
 % USER-DEFINED LOAD DOFs
@@ -76,7 +79,7 @@ edofMat = repmat(edofVec,1,24)+ ...
 iK = reshape(kron(edofMat,ones(24,1))',24*24*nele,1);
 jK = reshape(kron(edofMat,ones(1,24))',24*24*nele,1);
 
-% PREPARE FILTER
+% * PREPARE DENSITY FILTER
 iH = ones(nele*(2*(ceil(rmin)-1)+1)^2,1);
 jH = ones(size(iH));
 sH = zeros(size(iH));
@@ -103,53 +106,53 @@ H = sparse(iH,jH,sH);
 Hs = sum(H,2);
 
 % INITIALIZE ITERATION
-% x = repmat(volfrac,[nely,nelx,nelz]);
-x = ones(nely,nelx,nelz);
+x = repmat(volfrac,[nely,nelx,nelz]);
+% x = ones(nely,nelx,nelz);
 xPhys = x; 
 
 loop = 0; 
 change = 1;
-% START ITERATION
-% while change > tolx && loop < maxloop
-%     loop = loop+1;
-%     % FE-ANALYSIS
-%     % note: A(:) is column-wise flattening
-%     % (E_min + x^penal * (E - E_min))
-%     sK = reshape(KE(:)*(Emin+xPhys(:)'.^penal*(E0-Emin)),24*24*nele,1);
-%     K = sparse(iK,jK,sK); K = (K+K')/2;
-%     U(freedofs,:) = K(freedofs,freedofs)\F(freedofs,:);
-%     
-%     % OBJECTIVE FUNCTION AND SENSITIVITY ANALYSIS
-%     % element-wise compliance
-%     ce = reshape(sum((U(edofMat)*KE).*U(edofMat),2),[nely,nelx,nelz]);
-%     c = sum(sum(sum((Emin+xPhys.^penal*(E0-Emin)).*ce)));
-%     dc = -penal*(E0-Emin)*xPhys.^(penal-1).*ce;
-%     dv = ones(nely,nelx,nelz);
-%     
-%     % FILTERING AND MODIFICATION OF SENSITIVITIES
-%     dc(:) = H*(dc(:)./Hs);  
-%     dv(:) = H*(dv(:)./Hs);
-%     
-%     % OPTIMALITY CRITERIA UPDATE
-%     l1 = 0; l2 = 1e9; move = 0.2;
-%     while (l2-l1)/(l1+l2) > 1e-3
-%         lmid = 0.5*(l2+l1);
-%         xnew = max(0,max(x-move,min(1,min(x+move,x.*sqrt(-dc./dv/lmid)))));
-%         xPhys(:) = (H*xnew(:))./Hs;
-%         if sum(xPhys(:)) > volfrac*nele, l1 = lmid; else l2 = lmid; end
-%     end
-%     change = max(abs(xnew(:)-x(:)));
-%     x = xnew;
-%     % PRINT RESULTS
-%     fprintf(' It.:%5i Obj.:%11.4f Vol.:%7.3f ch.:%7.3f\n',loop,c,mean(xPhys(:)),change);
-%     % PLOT DENSITIES
-%     if displayflag, clf; display_3D(xPhys); end %#ok<UNRCH>
-% end
+% * START MAIN ITERATION
+while change > tolx && loop < maxloop
+    loop = loop+1;
+    % FE-ANALYSIS
+    % note: A(:) is column-wise flattening
+    % (E_min + x^penal * (E - E_min))
+    sK = reshape(KE(:)*(Emin+xPhys(:)'.^penal*(E0-Emin)),24*24*nele,1);
+    K = sparse(iK,jK,sK); K = (K+K')/2;
+    U(freedofs,:) = K(freedofs,freedofs)\F(freedofs,:);
+    
+    % OBJECTIVE FUNCTION AND SENSITIVITY ANALYSIS
+    % element-wise compliance
+    ce = reshape(sum((U(edofMat)*KE).*U(edofMat),2),[nely,nelx,nelz]);
+    c = sum(sum(sum((Emin+xPhys.^penal*(E0-Emin)).*ce)));
+    dc = -penal*(E0-Emin)*xPhys.^(penal-1).*ce;
+    dv = ones(nely,nelx,nelz);
+    
+    % FILTERING AND MODIFICATION OF SENSITIVITIES
+    dc(:) = H*(dc(:)./Hs);  
+    dv(:) = H*(dv(:)./Hs);
+    
+    % OPTIMALITY CRITERIA UPDATE
+    l1 = 0; l2 = 1e9; move = 0.2;
+    while (l2-l1)/(l1+l2) > 1e-3
+        lmid = 0.5*(l2+l1);
+        xnew = max(0,max(x-move,min(1,min(x+move,x.*sqrt(-dc./dv/lmid)))));
+        xPhys(:) = (H*xnew(:))./Hs;
+        if sum(xPhys(:)) > volfrac*nele, l1 = lmid; else l2 = lmid; end
+    end
+    change = max(abs(xnew(:)-x(:)));
+    x = xnew;
+    % PRINT RESULTS
+    fprintf(' It.:%5i Obj.:%11.4f Vol.:%7.3f ch.:%7.3f\n',loop,c,mean(xPhys(:)),change);
+    % PLOT DENSITIES
+    if displayflag, clf; display_3D(xPhys); end %#ok<UNRCH>
+end
 
 fprintf("Topopt total computation time: %0.2f s\n", toc)
 
 clf; 
-display_3D(xPhys, loadnid(:), fixednid(:));
+display_3D(xPhys, loaddof(:), fixeddof(:), force);
 % end % main function
 
 % =========================================================================
