@@ -1,5 +1,10 @@
 % === DISPLAY 3D TOPOLOGY (ISO-VIEW) ===
 function display_3D(rho, loaddof, fixeddof, force)
+if nargin < 2
+    loaddof = [];
+    fixeddof = [];
+    force = 0.0;
+end
 [nely,nelx,nelz] = size(rho);
 hx = 1; hy = 1; hz = 1; % User-defined unit element size
 face = [1 2 3 4; 2 6 7 3; 4 3 7 8; 1 5 8 4; 1 2 6 5; 5 6 7 8];

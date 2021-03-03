@@ -10,29 +10,37 @@
 
 % run_top3d(20, 10, 2, 0.3, 3.0, 2.0)
 % run_top3d(6, 4, 2, 0.3, 3.0, 2.0)
+nelx = 20;
+nely = 10;
+nelz = 2;
+volfrac = 0.3;
+penal = 3.0;
+rmin = 2.0;
+run_top3d(nelx,nely,nelz,volfrac,penal,rmin);
 
-% function run_top3d(nelx,nely,nelz,volfrac,penal,rmin)
+function run_top3d(nelx,nely,nelz,volfrac,penal,rmin)
 close all
 clc
 % record time
 tic
 
-% load MMA code
-addpath('GGP-Matlab')
-
-nelx = 20;
-nely = 10;
-nelz = 6;
-volfrac = 0.3;
-penal = 3.0;
-rmin = 2.0;
-
-optimizer = 'OC'; % 'MMA', 'fmincon'
+% 'OC', 'MMA', 'fmincon'
+% https://www.top3d.app/tutorials/
+optimizer = 'fmincon'; 
 filter_type = 'density'; % 'sensitivity'
+verbose = true; % printout iterations
+
+fprintf('Optimizer: %s, Filter: %s\n', optimizer, filter_type)
+
+if strcmp(optimizer, 'MMA')
+    % load MMA code
+    addpath('GGP-Matlab')
+end
 
 % USER-DEFINED LOOP PARAMETERS
 maxloop = 200;    % Maximum number of iterations
-tolx = 0.001;      % Terminarion criterion
+tolx = 1e-6;      % Terminarion criterion
+% tolx = 0.001;      % Terminarion criterion
 displayflag = 0;  % Display intermediate structure flag
 
 % USER-DEFINED MATERIAL PROPERTIES
@@ -112,48 +120,175 @@ xPhys = x;
 
 loop = 0; 
 change = 1;
-% * START MAIN ITERATION
-while change > tolx && loop < maxloop
-    loop = loop+1;
+
+if strcmp(optimizer, 'MMA')
+    % * INITIALIZE MMA OPTIMIZER
+    m     = 1;                % The number of general constraints.
+    n     = nele;             % The number of design variables x_j.
+    xmin  = zeros(n,1);       % Column vector with the lower bounds for the variables x_j.
+    xmax  = ones(n,1);        % Column vector with the upper bounds for the variables x_j.
+    xold1 = x(:);             % xval, one iteration ago (provided that iter>1).
+    xold2 = x(:);             % xval, two iterations ago (provided that iter>2).
+    low   = ones(n,1);        % Column vector with the lower asymptotes from the previous iteration (provided that iter>1).
+    upp   = ones(n,1);        % Column vector with the upper asymptotes from the previous iteration (provided that iter>1).
+    a0    = 1;                % The constants a_0 in the term a_0*z.
+    a     = zeros(m,1);       % Column vector with the constants a_i in the terms a_i*z.
+    c_MMA = 10000*ones(m,1);  % Column vector with the constants c_i in the terms c_i*y_i.
+    d     = zeros(m,1);       % Column vector with the constants d_i in the terms 0.5*d_i*(y_i)^2.
+end
+
+global ce % Shared between myfun and myHessianFcn, used by fmincon
+if ~strcmp(optimizer, 'fmincon')
+    % * START MAIN ITERATION
+    while change > tolx && loop < maxloop
+        loop = loop+1;
+        % * FE-ANALYSIS
+        sK = reshape(KE(:)*(Emin+xPhys(:)'.^penal*(E0-Emin)),24*24*nele,1);
+        K = sparse(iK,jK,sK); K = (K+K')/2;
+        U(freedofs,:) = K(freedofs,freedofs)\F(freedofs,:);
+
+        % * OBJECTIVE FUNCTION AND SENSITIVITY ANALYSIS
+        % element-wise compliance
+        ce = reshape(sum((U(edofMat)*KE).*U(edofMat),2),[nely,nelx,nelz]);
+        c = sum(sum(sum((Emin+xPhys.^penal*(E0-Emin)).*ce)));
+        dc = -penal*(E0-Emin)*xPhys.^(penal-1).*ce;
+        dv = ones(nely,nelx,nelz);
+
+        % * FILTERING AND MODIFICATION OF SENSITIVITIES
+        % compliance gradient
+        dc(:) = H*(dc(:)./Hs);  
+        % volume gradient
+        dv(:) = H*(dv(:)./Hs);
+
+        if strcmp(optimizer, 'OC')
+            % * OPTIMALITY CRITERIA UPDATE
+            l1 = 0; l2 = 1e9; move = 0.2;
+            while (l2-l1)/(l1+l2) > 1e-3
+                lmid = 0.5*(l2+l1);
+                xnew = max(0,max(x-move,min(1,min(x+move,x.*sqrt(-dc./dv/lmid)))));
+                xPhys(:) = (H*xnew(:))./Hs;
+                if sum(xPhys(:)) > volfrac*nele, l1 = lmid; else l2 = lmid; end
+            end
+        elseif strcmp(optimizer, 'MMA')
+            % * METHOD OF MOVING ASYMPTOTES
+            xval  = x(:);
+            f0val = c;
+            df0dx = dc(:);
+            fval  = sum(xPhys(:))/(volfrac*nele) - 1;
+            dfdx  = dv(:)' / (volfrac*nele);
+            [xmma, ~, ~, ~, ~, ~, ~, ~, ~, low,upp] = ...
+            mmasub(m, n, loop, xval, xmin, xmax, xold1, xold2, ...
+            f0val,df0dx,fval,dfdx,low,upp,a0,a,c_MMA,d);
+            % * Update MMA Variables
+            xnew     = reshape(xmma,nely,nelx,nelz);
+            xPhys(:) = (H*xnew(:))./Hs;
+            xold2    = xold1(:);
+            xold1    = x(:);
+        end
+
+        change = max(abs(xnew(:)-x(:)));
+        x = xnew;
+        % PRINT RESULTS
+        if verbose, fprintf(' It.:%5i Obj.:%11.4f Vol.:%7.3f delta x.:%7.3f\n',loop,c,mean(xPhys(:)),change); end
+        % PLOT DENSITIES
+        if displayflag, clf; display_3D(xPhys); end %#ok<UNRCH>
+    end
+else
+    A = [];
+    B = [];
+    Aeq = [];
+    Beq = [];
+    LB = zeros(size(x));
+    UB = ones(size(x));
+    OPTIONS = optimset('TolX',tolx, 'MaxIter',maxloop, 'Algorithm','interior-point',...
+    'GradObj','on', 'GradConstr','on', 'Hessian','user-supplied', 'HessFcn', @myHessianFcn,'Display','none', ...
+    'OutputFcn', @(x,optimValues,state) myOutputFcn(x,optimValues,state,displayflag,verbose)...
+    );
+    % 'PlotFcns',@optimplotfval);
+    fmincon(@myObjFcn, x, A, B, Aeq, Beq, LB, UB, @myConstrFcn, OPTIONS);
+end
+
+if change < tolx
+    term_reason = 'Delta x Converged';
+else
+    term_reason = 'Iteration limits exceeded';
+end
+fprintf("Topopt total computation time: %0.2f s, terminated due to %s\n", toc, term_reason)
+clf; 
+display_3D(xPhys, loaddof(:), fixeddof(:), force);
+
+% fmincon function definitions
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function [f, gradf] = myObjFcn(x)
+    xPhys(:) = (H*x(:))./Hs;
     % FE-ANALYSIS
-    % note: A(:) is column-wise flattening
-    % (E_min + x^penal * (E - E_min))
     sK = reshape(KE(:)*(Emin+xPhys(:)'.^penal*(E0-Emin)),24*24*nele,1);
     K = sparse(iK,jK,sK); K = (K+K')/2;
     U(freedofs,:) = K(freedofs,freedofs)\F(freedofs,:);
-    
     % OBJECTIVE FUNCTION AND SENSITIVITY ANALYSIS
-    % element-wise compliance
     ce = reshape(sum((U(edofMat)*KE).*U(edofMat),2),[nely,nelx,nelz]);
     c = sum(sum(sum((Emin+xPhys.^penal*(E0-Emin)).*ce)));
     dc = -penal*(E0-Emin)*xPhys.^(penal-1).*ce;
-    dv = ones(nely,nelx,nelz);
-    
     % FILTERING AND MODIFICATION OF SENSITIVITIES
-    dc(:) = H*(dc(:)./Hs);  
-    dv(:) = H*(dv(:)./Hs);
-    
-    % OPTIMALITY CRITERIA UPDATE
-    l1 = 0; l2 = 1e9; move = 0.2;
-    while (l2-l1)/(l1+l2) > 1e-3
-        lmid = 0.5*(l2+l1);
-        xnew = max(0,max(x-move,min(1,min(x+move,x.*sqrt(-dc./dv/lmid)))));
-        xPhys(:) = (H*xnew(:))./Hs;
-        if sum(xPhys(:)) > volfrac*nele, l1 = lmid; else l2 = lmid; end
-    end
-    change = max(abs(xnew(:)-x(:)));
-    x = xnew;
-    % PRINT RESULTS
-    fprintf(' It.:%5i Obj.:%11.4f Vol.:%7.3f ch.:%7.3f\n',loop,c,mean(xPhys(:)),change);
-    % PLOT DENSITIES
-    if displayflag, clf; display_3D(xPhys); end %#ok<UNRCH>
-end
+    dc(:) = H*(dc(:)./Hs);
+    % RETURN
+    f = c;
+    gradf = dc(:);
+end % myfun
 
-fprintf("Topopt total computation time: %0.2f s\n", toc)
+function h = myHessianFcn(x, lambda)
+    xPhys = reshape(x,nely,nelx,nelz);
+    % Compute Hessian of Obj.
+    Hessf = 2*(penal*(E0-Emin)*xPhys.^(penal-1)).^2 ./ (E0 + (E0-Emin)*xPhys.^penal) .* ce;
+    Hessf(:) = H*(Hessf(:)./Hs);
+    % Compute Hessian of constraints
+    Hessc = 0; % Linear constraint
+    % Hessian of Lagrange
+    h = diag(Hessf(:)) + lambda.ineqnonlin*Hessc;
+end % myHessianFcn
 
-clf; 
-display_3D(xPhys, loaddof(:), fixeddof(:), force);
-% end % main function
+function [cneq, ceq, gradc, gradceq] = myConstrFcn(x)
+    xPhys(:) = (H*x(:))./Hs;
+    % Non-linear Constraints
+    cneq  = sum(xPhys(:)) - volfrac*nele;
+    gradc = ones(nele,1);
+    % Linear Constraints
+    ceq     = [];
+    gradceq = [];
+end % mycon
+
+function stop = myOutputFcn(x,optimValues,state,displayflag,verbose)
+    stop = false;
+    switch state
+        case 'iter'
+            % Make updates to plot or guis as needed
+            xPhys = reshape(x, nely, nelx, nelz);
+            %% PRINT RESULTS
+            if verbose
+                fprintf(' It.:%5i Obj.:%11.4f Vol.:%7.3f ch.:%7.3f\n',optimValues.iteration,optimValues.fval, ...
+                    mean(xPhys(:)),optimValues.stepsize);
+            end
+            %% PLOT DENSITIES
+            if displayflag, figure(10); clf; display_3D(xPhys); end
+            title([' It.:',sprintf('%5i',optimValues.iteration),...
+                ' Obj. = ',sprintf('%11.4f',optimValues.fval),...
+                ' ch.:',sprintf('%7.3f',optimValues.stepsize)]);
+        case 'init'
+            % Setup for plots or guis
+            if displayflag
+                figure(10)
+            end
+        case 'done'
+            fprintf('fmincon done.\n');
+            % Cleanup of plots, guis, or final plot
+            % fprintf("Topopt total computation time: %0.2f s", toc)
+            % figure(10); clf; display_3D(xPhys);
+        otherwise
+    end % switch
+end % myOutputFcn
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+end % main function
 
 % =========================================================================
 % === This code was written by K Liu and A Tovar, Dept. of Mechanical   ===
