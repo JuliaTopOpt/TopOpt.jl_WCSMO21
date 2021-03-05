@@ -1,5 +1,6 @@
 % AN 169 LINE 3D TOPOLOGY OPITMIZATION CODE BY LIU AND TOVAR (JUL 2013)
 % https://github.com/Top3dAPP/Top3d
+% https://www.top3d.app/tutorials/
 % https://link.springer.com/article/10.1007%252Fs00158-014-1107-x
 % ------
 % * TopOpt.jl comparison
@@ -7,6 +8,9 @@
 % TODO
 % - MMA, OC, fmincon
 % - density & sensitivity filter
+
+% MMA obj 2034
+% OC obj 1473
 
 % run_top3d(20, 10, 2, 0.3, 3.0, 2.0)
 % run_top3d(6, 4, 2, 0.3, 3.0, 2.0)
@@ -16,20 +20,19 @@ nelz = 2;
 volfrac = 0.3;
 penal = 3.0;
 rmin = 2.0;
-run_top3d(nelx,nely,nelz,volfrac,penal,rmin);
+% 'OC', 'MMA', 'fmincon'
+optimizer = 'OC'; 
+% filter_type = 'density'; % 'sensitivity'
+filter_type = 'sensitivity'; % ''
+run_top3d(nelx,nely,nelz,volfrac,penal,rmin,optimizer,filter_type);
 
-function run_top3d(nelx,nely,nelz,volfrac,penal,rmin)
+function run_top3d(nelx,nely,nelz,volfrac,penal,rmin,optimizer,filter_type)
 close all
 clc
 % record time
 tic
 
-% 'OC', 'MMA', 'fmincon'
-% https://www.top3d.app/tutorials/
-optimizer = 'fmincon'; 
-filter_type = 'density'; % 'sensitivity'
 verbose = true; % printout iterations
-
 fprintf('Optimizer: %s, Filter: %s\n', optimizer, filter_type)
 
 if strcmp(optimizer, 'MMA')
@@ -38,7 +41,7 @@ if strcmp(optimizer, 'MMA')
 end
 
 % USER-DEFINED LOOP PARAMETERS
-maxloop = 200;    % Maximum number of iterations
+maxloop = 400;    % Maximum number of iterations
 tolx = 1e-6;      % Terminarion criterion
 % tolx = 0.001;      % Terminarion criterion
 displayflag = 0;  % Display intermediate structure flag
@@ -46,7 +49,7 @@ displayflag = 0;  % Display intermediate structure flag
 % USER-DEFINED MATERIAL PROPERTIES
 E0 = 1.0;         % Young's modulus of solid material
 % Young's modulus of void-like material
-Emin = 1e-9; % 0.001
+Emin = 1e-3; % 0.001
 nu = 0.3;         % Poisson's ratio
 
 % USER-DEFINED LOAD DOFs
@@ -155,10 +158,14 @@ if ~strcmp(optimizer, 'fmincon')
         dv = ones(nely,nelx,nelz);
 
         % * FILTERING AND MODIFICATION OF SENSITIVITIES
-        % compliance gradient
-        dc(:) = H*(dc(:)./Hs);  
-        % volume gradient
-        dv(:) = H*(dv(:)./Hs);
+        if strcmp(filter_type, 'density')
+            % compliance gradient
+            dc(:) = H*(dc(:)./Hs);  
+            % volume gradient
+            dv(:) = H*(dv(:)./Hs);
+        elseif strcmp(filter_type, 'sensitivity')
+            dc(:) = H*(x(:).*dc(:))./Hs./max(1e-3,x(:));
+        end
 
         if strcmp(optimizer, 'OC')
             % * OPTIMALITY CRITERIA UPDATE
@@ -166,7 +173,13 @@ if ~strcmp(optimizer, 'fmincon')
             while (l2-l1)/(l1+l2) > 1e-3
                 lmid = 0.5*(l2+l1);
                 xnew = max(0,max(x-move,min(1,min(x+move,x.*sqrt(-dc./dv/lmid)))));
-                xPhys(:) = (H*xnew(:))./Hs;
+
+                if strcmp(filter_type, 'density')
+                    xPhys(:) = (H*xnew(:))./Hs;
+                elseif strcmp(filter_type, 'sensitivity')
+                    xPhys = xnew;
+                end
+
                 if sum(xPhys(:)) > volfrac*nele, l1 = lmid; else l2 = lmid; end
             end
         elseif strcmp(optimizer, 'MMA')
@@ -181,7 +194,13 @@ if ~strcmp(optimizer, 'fmincon')
             f0val,df0dx,fval,dfdx,low,upp,a0,a,c_MMA,d);
             % * Update MMA Variables
             xnew     = reshape(xmma,nely,nelx,nelz);
-            xPhys(:) = (H*xnew(:))./Hs;
+
+            if strcmp(filter_type, 'density')
+                xPhys(:) = (H*xnew(:))./Hs;
+            elseif strcmp(filter_type, 'sensitivity')
+                xPhys = xnew;
+            end
+
             xold2    = xold1(:);
             xold1    = x(:);
         end
@@ -194,6 +213,8 @@ if ~strcmp(optimizer, 'fmincon')
         if displayflag, clf; display_3D(xPhys); end %#ok<UNRCH>
     end
 else
+    % * fmincon
+    assert(strcmp(filter_type, 'density'), 'Sensitivity filter not implemented yet for fmincon.');
     A = [];
     B = [];
     Aeq = [];
@@ -220,6 +241,7 @@ display_3D(xPhys, loaddof(:), fixeddof(:), force);
 % fmincon function definitions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function [f, gradf] = myObjFcn(x)
+    % TODO sensitivity filter
     xPhys(:) = (H*x(:))./Hs;
     % FE-ANALYSIS
     sK = reshape(KE(:)*(Emin+xPhys(:)'.^penal*(E0-Emin)),24*24*nele,1);
@@ -230,6 +252,7 @@ function [f, gradf] = myObjFcn(x)
     c = sum(sum(sum((Emin+xPhys.^penal*(E0-Emin)).*ce)));
     dc = -penal*(E0-Emin)*xPhys.^(penal-1).*ce;
     % FILTERING AND MODIFICATION OF SENSITIVITIES
+    % TODO sensitivity filter
     dc(:) = H*(dc(:)./Hs);
     % RETURN
     f = c;
@@ -240,6 +263,7 @@ function h = myHessianFcn(x, lambda)
     xPhys = reshape(x,nely,nelx,nelz);
     % Compute Hessian of Obj.
     Hessf = 2*(penal*(E0-Emin)*xPhys.^(penal-1)).^2 ./ (E0 + (E0-Emin)*xPhys.^penal) .* ce;
+    % TODO sensitivity filter
     Hessf(:) = H*(Hessf(:)./Hs);
     % Compute Hessian of constraints
     Hessc = 0; % Linear constraint
@@ -248,6 +272,7 @@ function h = myHessianFcn(x, lambda)
 end % myHessianFcn
 
 function [cneq, ceq, gradc, gradceq] = myConstrFcn(x)
+    % TODO sensitivity filter
     xPhys(:) = (H*x(:))./Hs;
     % Non-linear Constraints
     cneq  = sum(xPhys(:)) - volfrac*nele;
