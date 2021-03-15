@@ -5,45 +5,40 @@
 % ------
 % * TopOpt.jl comparison
 % With modifications from Yijiang Huang (yijiangh@mit.edu)
-% TODO
 % - MMA, OC, fmincon
 % - density & sensitivity filter
 
-% MMA obj 2034
-% OC obj 1473
-
-% run_top3d(20, 10, 2, 0.3, 3.0, 2.0)
-% run_top3d(6, 4, 2, 0.3, 3.0, 2.0)
-nelx = 20;
-nely = 10;
-nelz = 2;
+nelx = 60;
+nely = 20;
+nelz = 20;
 volfrac = 0.3;
 penal = 3.0;
-rmin = 2.0;
+rmin = 2.0; % filter radius
+
 % 'OC', 'MMA', 'fmincon'
-optimizer = 'OC'; 
-% filter_type = 'density'; % 'sensitivity'
-filter_type = 'sensitivity'; % ''
-run_top3d(nelx,nely,nelz,volfrac,penal,rmin,optimizer,filter_type);
-
-function run_top3d(nelx,nely,nelz,volfrac,penal,rmin,optimizer,filter_type)
-close all
-clc
-% record time
-tic
-
+optimizer = 'OC';
+% 'density', 'sensitivity'
+filter_type = 'density';
 verbose = true; % printout iterations
-fprintf('Optimizer: %s, Filter: %s\n', optimizer, filter_type)
+run_top3d(nelx,nely,nelz,volfrac,penal,rmin,optimizer,filter_type,verbose);
 
 if strcmp(optimizer, 'MMA')
     % load MMA code
-    addpath('GGP-Matlab')
+    addpath(genpath('./GCMMA-MMA-code-1.5'));
 end
+
+function run_top3d(nelx,nely,nelz,volfrac,penal,rmin,optimizer,filter_type,verbose)
+close all
+clc
+% record time
+tic;
+
+fprintf('Optimizer: %s, Filter: %s\n', optimizer, filter_type)
 
 % USER-DEFINED LOOP PARAMETERS
 maxloop = 400;    % Maximum number of iterations
-tolx = 1e-6;      % Terminarion criterion
-% tolx = 0.001;      % Terminarion criterion
+% tolx = 1e-6;      % Terminarion criterion
+tolx = 0.001;      % Terminarion criterion
 displayflag = 0;  % Display intermediate structure flag
 
 % USER-DEFINED MATERIAL PROPERTIES
@@ -140,10 +135,12 @@ if strcmp(optimizer, 'MMA')
     d     = zeros(m,1);       % Column vector with the constants d_i in the terms 0.5*d_i*(y_i)^2.
 end
 
+max_iter_time = -Inf;
 global ce % Shared between myfun and myHessianFcn, used by fmincon
 if ~strcmp(optimizer, 'fmincon')
     % * START MAIN ITERATION
     while change > tolx && loop < maxloop
+        iter_start = tic;
         loop = loop+1;
         % * FE-ANALYSIS
         sK = reshape(KE(:)*(Emin+xPhys(:)'.^penal*(E0-Emin)),24*24*nele,1);
@@ -207,8 +204,11 @@ if ~strcmp(optimizer, 'fmincon')
 
         change = max(abs(xnew(:)-x(:)));
         x = xnew;
+        iter_time = toc(iter_start);
+        max_iter_time = max(max_iter_time, iter_time);
         % PRINT RESULTS
-        if verbose, fprintf(' It.:%5i Obj.:%11.4f Vol.:%7.3f delta x.:%7.3f\n',loop,c,mean(xPhys(:)),change); end
+        if verbose, fprintf(' It.:%5i Obj.:%11.4f Vol.:%7.3f delta x.:%7.3f iter_t: %0.2f\n',...
+                loop,c,mean(xPhys(:)),change,iter_time); end
         % PLOT DENSITIES
         if displayflag, clf; display_3D(xPhys); end %#ok<UNRCH>
     end
@@ -234,7 +234,8 @@ if change < tolx
 else
     term_reason = 'Iteration limits exceeded';
 end
-fprintf("Topopt total computation time: %0.2f s, terminated due to %s\n", toc, term_reason)
+fprintf("Topopt total computation time: %0.2f s, max iter time: %0.2f, terminated due to %s\n",...
+    toc, max_iter_time, term_reason)
 clf; 
 display_3D(xPhys, loaddof(:), fixeddof(:), force);
 

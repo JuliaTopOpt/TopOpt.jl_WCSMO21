@@ -8,3 +8,9 @@
 */__pycache__
 
 python_topy/benchmark/iterations
+
+matlab_top3d/GCMMA-MMA-code-1.5/*
+
+~*
+
+*/.ipynb_checkpoints/*
