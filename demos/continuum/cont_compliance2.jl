@@ -34,7 +34,7 @@ addvar!(m, zeros(length(x0)), ones(length(x0)))
 Nonconvex.add_ineq_constraint!(m, constr)
 
 options = MMAOptions(
-    maxiter=1000, tol = Tolerance(kkt = 1e-4, f = 1e-4),
+    maxiter=1000, tol = Tolerance(kkt = 1e-4, x=1e-4, f = 1e-4),
 )
 TopOpt.setpenalty!(solver, p)
 @time r = Nonconvex.optimize(
