@@ -27,7 +27,7 @@ function constr1(x)
     return norm(stress(cheqfilter(x)), 30) - stress_threshold
 end
 function constr2(x)
-    return comp(cheqfilter(x)) - 500
+    return comp(cheqfilter(x)) - 1000
 end
 
 m = Model(obj)
@@ -35,7 +35,9 @@ addvar!(m, zeros(length(x0)), ones(length(x0)))
 Nonconvex.add_ineq_constraint!(m, constr1)
 Nonconvex.add_ineq_constraint!(m, constr2)
 
-options = MMAOptions(maxiter=1000, tol = Tolerance(kkt = 1e-4, f = 1e-4))
+options = MMAOptions(
+    maxiter=1000, tol = Tolerance(kkt = 1e-3, f = 1e-3),
+)
 TopOpt.setpenalty!(solver, p)
 r1 = Nonconvex.optimize(
     m, MMA87(dualoptimizer = ConjugateGradient()),
