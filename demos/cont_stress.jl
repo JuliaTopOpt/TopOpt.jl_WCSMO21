@@ -1,6 +1,5 @@
 using Makie, TopOpt, LinearAlgebra, StatsFuns
 using TopOpt.TopOptProblems.Visualization: visualize
-Nonconvex.show_residuals[] = true
 
 E = 1.0 # Young’s modulus
 v = 0.3 # Poisson’s ratio
