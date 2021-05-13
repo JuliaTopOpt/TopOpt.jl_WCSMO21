@@ -36,8 +36,8 @@ options = MMAOptions(
 TopOpt.setpenalty!(solver, p)
 @time r = Nonconvex.optimize(m, MMA87(),x0, options = options);
 
-obj(r.minimizer)
-constr(r.minimizer)
+@show obj(r.minimizer)
+@show constr(r.minimizer)
 topology = cheqfilter(r.minimizer);
 fig = visualize(problem; topology = topology)
 Makie.display(fig)
