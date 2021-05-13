@@ -1,4 +1,4 @@
-module ContStressDemo
+module ContComplianceDemo
 
 using Makie, TopOpt, LinearAlgebra, StatsFuns
 using TopOpt.TopOptProblems.Visualization: visualize
@@ -11,7 +11,6 @@ xmin = 0.0001 # minimum density
 problem_size = (160, 40)
 x0 = fill(1.0, prod(problem_size)) # initial design
 p = 4.0 # penalty
-stress_threshold = 1.0 # maximum von Mises stress
 compliance_threshold = 800 # maximum compliance
 
 problem = PointLoadCantilever(Val{:Linear}, problem_size, (1.0, 1.0), E, v, f)
@@ -26,17 +25,13 @@ comp = TopOpt.Compliance(problem, solver)
 function obj(x)
     return sum(cheqfilter(x)) / length(x)
 end
-function constr1(x)
-    return norm(stress(cheqfilter(x)), 20) - stress_threshold
-end
-function constr2(x)
+function constr(x)
     return comp(cheqfilter(x)) - compliance_threshold
 end
 
 m = Model(obj)
 addvar!(m, zeros(length(x0)), ones(length(x0)))
-Nonconvex.add_ineq_constraint!(m, constr1)
-Nonconvex.add_ineq_constraint!(m, constr2)
+Nonconvex.add_ineq_constraint!(m, constr)
 
 options = MMAOptions(
     maxiter=1000, tol = Tolerance(kkt = 1e-4, f = 1e-4),
@@ -48,8 +43,7 @@ TopOpt.setpenalty!(solver, p)
 );
 
 obj(r1.minimizer)
-constr1(r1.minimizer)
-constr2(r1.minimizer)
+constr(r1.minimizer)
 maximum(stress(cheqfilter(r1.minimizer)))
 topology1 = cheqfilter(r1.minimizer);
 fig = visualize(problem; topology = topology1)
