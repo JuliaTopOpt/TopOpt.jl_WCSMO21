@@ -8,15 +8,15 @@
 % - MMA, OC, fmincon
 % - density & sensitivity filter
 
-nelx = 60;
-nely = 20;
-nelz = 20;
+nelx = 48;
+nely = 24;
+nelz = 24;
 volfrac = 0.3;
 penal = 3.0;
 rmin = 2.0; % filter radius
 
 % 'OC', 'MMA', 'fmincon'
-optimizer = 'OC';
+optimizer = 'MMA';
 % 'density', 'sensitivity'
 filter_type = 'density';
 verbose = true; % printout iterations
@@ -36,9 +36,10 @@ tic;
 fprintf('Optimizer: %s, Filter: %s\n', optimizer, filter_type)
 
 % USER-DEFINED LOOP PARAMETERS
-maxloop = 400;    % Maximum number of iterations
+maxloop = 300;    % Maximum number of iterations
 % tolx = 1e-6;      % Terminarion criterion
-tolx = 0.001;      % Terminarion criterion
+xtol_abs = 0.001;      % Terminarion criterion
+ftol_abs = 0.001;
 displayflag = 0;  % Display intermediate structure flag
 
 % USER-DEFINED MATERIAL PROPERTIES
@@ -136,10 +137,13 @@ if strcmp(optimizer, 'MMA')
 end
 
 max_iter_time = -Inf;
+prev_f = Inf;
+fch = Inf;
+
 global ce % Shared between myfun and myHessianFcn, used by fmincon
 if ~strcmp(optimizer, 'fmincon')
     % * START MAIN ITERATION
-    while change > tolx && loop < maxloop
+    while fch > ftol_abs && change > xtol_abs && loop < maxloop
         iter_start = tic;
         loop = loop+1;
         % * FE-ANALYSIS
@@ -201,14 +205,18 @@ if ~strcmp(optimizer, 'fmincon')
             xold2    = xold1(:);
             xold1    = x(:);
         end
+        
+          % - compute objective
+        fch = max(abs(prev_f-c));
+        prev_f = c;
 
         change = max(abs(xnew(:)-x(:)));
         x = xnew;
         iter_time = toc(iter_start);
         max_iter_time = max(max_iter_time, iter_time);
         % PRINT RESULTS
-        if verbose, fprintf(' It.:%5i Obj.:%11.4f Vol.:%7.3f delta x.:%7.3f iter_t: %0.2f\n',...
-                loop,c,mean(xPhys(:)),change,iter_time); end
+        if verbose, fprintf(' It.:%5i Obj.:%11.4f ch.:%7.3f fch.:%7.3f Vol.:%7.3f delta x.:%7.3f iter_t: %0.2f\n',...
+                loop,c,change,fch,mean(xPhys(:)),change,iter_time); end
         % PLOT DENSITIES
         if displayflag, clf; display_3D(xPhys); end %#ok<UNRCH>
     end
@@ -221,7 +229,7 @@ else
     Beq = [];
     LB = zeros(size(x));
     UB = ones(size(x));
-    OPTIONS = optimset('TolX',tolx, 'MaxIter',maxloop, 'Algorithm','interior-point',...
+    OPTIONS = optimset('TolX',xtol_abs, 'MaxIter',maxloop, 'Algorithm','interior-point',...
     'GradObj','on', 'GradConstr','on', 'Hessian','user-supplied', 'HessFcn', @myHessianFcn,'Display','none', ...
     'OutputFcn', @(x,optimValues,state) myOutputFcn(x,optimValues,state,displayflag,verbose)...
     );
@@ -229,15 +237,22 @@ else
     fmincon(@myObjFcn, x, A, B, Aeq, Beq, LB, UB, @myConstrFcn, OPTIONS);
 end
 
-if change < tolx
+if change < xtol_abs
     term_reason = 'Delta x Converged';
 else
     term_reason = 'Iteration limits exceeded';
 end
+elapsedTime = toc;
 fprintf("Topopt total computation time: %0.2f s, max iter time: %0.2f, terminated due to %s\n",...
-    toc, max_iter_time, term_reason)
+    elapsedTime, max_iter_time, term_reason)
 clf; 
 display_3D(xPhys, loaddof(:), fixeddof(:), force);
+
+image_file = sprintf('top3d_%s-%s-%s.png', int2str(nelx),int2str(nely),int2str(nelz));
+saveas(gcf,image_file)
+
+file_path = sprintf('top3d_%s-%s-%s.mat', int2str(nelx),int2str(nely),int2str(nelz));
+save(file_path, 'loop', 'c', 'elapsedTime');
 
 % fmincon function definitions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
