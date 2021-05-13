@@ -1,4 +1,4 @@
-module ContComplianceDemo
+module ContComplianceDemo2
 
 using Makie, TopOpt, LinearAlgebra, StatsFuns
 using TopOpt.TopOptProblems.Visualization: visualize
@@ -37,16 +37,16 @@ options = MMAOptions(
     maxiter=1000, tol = Tolerance(kkt = 1e-4, f = 1e-4),
 )
 TopOpt.setpenalty!(solver, p)
-@time r1 = Nonconvex.optimize(
+@time r = Nonconvex.optimize(
     m, MMA87(dualoptimizer = ConjugateGradient()),
     x0, options = options,
 );
 
-obj(r1.minimizer)
-constr(r1.minimizer)
-maximum(stress(cheqfilter(r1.minimizer)))
-topology1 = cheqfilter(r1.minimizer);
-fig = visualize(problem; topology = topology1)
+@show obj(r.minimizer)
+@show constr(r.minimizer)
+@show maximum(stress(cheqfilter(r.minimizer)))
+topology = cheqfilter(r.minimizer);
+fig = visualize(problem; topology = topology)
 Makie.display(fig)
 
 end

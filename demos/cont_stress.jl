@@ -42,17 +42,17 @@ options = MMAOptions(
     maxiter=1000, tol = Tolerance(kkt = 1e-4, f = 1e-4),
 )
 TopOpt.setpenalty!(solver, p)
-@time r1 = Nonconvex.optimize(
+@time r = Nonconvex.optimize(
     m, MMA87(dualoptimizer = ConjugateGradient()),
     x0, options = options,
 );
 
-obj(r1.minimizer)
-constr1(r1.minimizer)
-constr2(r1.minimizer)
-maximum(stress(cheqfilter(r1.minimizer)))
-topology1 = cheqfilter(r1.minimizer);
-fig = visualize(problem; topology = topology1)
+@show obj(r.minimizer)
+@show constr1(r.minimizer)
+@show constr2(r.minimizer)
+@show maximum(stress(cheqfilter(r.minimizer)))
+topology = cheqfilter(r.minimizer);
+fig = visualize(problem; topology = topology)
 Makie.display(fig)
 
 end
