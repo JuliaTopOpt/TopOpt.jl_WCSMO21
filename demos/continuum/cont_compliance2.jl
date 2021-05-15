@@ -23,9 +23,11 @@ stress = TopOpt.MicroVonMisesStress(solver)
 comp = TopOpt.Compliance(problem, solver)
 
 function obj(x)
+    # minimize volume
     return sum(cheqfilter(x)) / length(x)
 end
 function constr(x)
+    # compliance upper-bound
     return comp(cheqfilter(x)) - compliance_threshold
 end
 
@@ -46,7 +48,8 @@ TopOpt.setpenalty!(solver, p)
 @show constr(r.minimizer)
 @show maximum(stress(cheqfilter(r.minimizer)))
 topology = cheqfilter(r.minimizer);
-fig = visualize(problem; topology = topology)
+fig = visualize(problem, solver.u; 
+    topology = topology, default_exagg_scale=0.0, scale_range=10.0)
 Makie.display(fig)
 
 end

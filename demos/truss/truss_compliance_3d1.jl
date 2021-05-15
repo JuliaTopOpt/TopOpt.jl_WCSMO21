@@ -6,7 +6,7 @@ using TopOpt.TrussTopOptProblems.TrussVisualization: visualize
 # 3D
 ndim = 3
 node_points, elements, mats, crosssecs, fixities, load_cases = 
-    parse_truss_json("./tim_$(ndim)d.json");
+    parse_truss_json(joinpath(@__DIR__, "tim_$(ndim)d.json"));
 ndim, nnodes, ncells = length(node_points[1]), length(node_points), length(elements)
 loads = load_cases["0"]
 problem = TrussProblem(
@@ -23,9 +23,11 @@ solver = FEASolver(Displacement, Direct, problem, xmin = xmin)
 comp = TopOpt.Compliance(problem, solver)
 
 function obj(x)
+    # minimize compliance
     return comp(x)
 end
 function constr(x)
+    # volume fraction constraint
     return sum(x) / length(x) - V
 end
 
@@ -47,6 +49,7 @@ TopOpt.setpenalty!(solver, p)
 @show constr(r.minimizer)
 fig = visualize(
     problem, solver.u; topology = r.minimizer,
+    default_exagg_scale=0.0, exagg_range=100.0,
 )
 Makie.display(fig)
 

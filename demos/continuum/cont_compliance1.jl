@@ -20,9 +20,11 @@ cheqfilter = DensityFilter(solver, rmin = rmin)
 comp = TopOpt.Compliance(problem, solver)
 
 function obj(x)
+    # minimize compliance
     return comp(cheqfilter(x))
 end
 function constr(x)
+    # volume fraction constraint
     return sum(cheqfilter(x)) / length(x) - V
 end
 
@@ -31,7 +33,7 @@ addvar!(m, zeros(length(x0)), ones(length(x0)))
 Nonconvex.add_ineq_constraint!(m, constr)
 
 options = MMAOptions(
-    maxiter=1000, tol = Tolerance(kkt = 1e-4, x=1e-4, f = 1e-4),
+    maxiter=1000, tol = Tolerance(kkt = 1e-4, x = 1e-4, f = 1e-4),
 )
 TopOpt.setpenalty!(solver, p)
 @time r = Nonconvex.optimize(m, MMA87(),x0, options = options);
@@ -39,7 +41,8 @@ TopOpt.setpenalty!(solver, p)
 @show obj(r.minimizer)
 @show constr(r.minimizer)
 topology = cheqfilter(r.minimizer);
-fig = visualize(problem; topology = topology)
+fig = visualize(problem, solver.u; 
+    topology = topology, default_exagg_scale=0.0, scale_range=10.0)
 Makie.display(fig)
 
 end
