@@ -26,10 +26,10 @@ This repo constains benchmarks and demos for [TopOpt.jl](https://github.com/moha
 
 ### Summary
 
-<img alt="benchmark_summary_polytop" src="./images/benchmark_summary_polytop.png" width=300/>
-<img alt="benchmark_summary_topopt.py" src="./images/benchmark_summary_topopt.py.png" width=300/>
+<img alt="benchmark_summary_polytop" src="./images/benchmark_summary_polytop.png" width=200/>
+<img alt="benchmark_summary_topopt.py" src="./images/benchmark_summary_topopt.py.png" width=200/>
 
-<img alt="benchmark_summary_top3d" src="./images/benchmark_summary_top3d.png" width=300/>
-<img alt="benchmark_summary_top3d125" src="./images/benchmark_summary_top3d125.png" width=300/>
+<img alt="benchmark_summary_top3d" src="./images/benchmark_summary_top3d.png" width=200/>
+<img alt="benchmark_summary_top3d125" src="./images/benchmark_summary_top3d125.png" width=200/>
 
 ### Detailed data
