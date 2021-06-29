@@ -36,7 +36,8 @@ options = MMAOptions(
     maxiter=1000, tol = Tolerance(kkt = 1e-4, x = 1e-4, f = 1e-4),
 )
 TopOpt.setpenalty!(solver, p)
-@time r = Nonconvex.optimize(m, MMA87(),x0, options = options);
+# Method of Moving Asymptotes
+@time r = Nonconvex.optimize(m, MMA87(), x0, options = options);
 
 @show obj(r.minimizer)
 @show constr(r.minimizer)
