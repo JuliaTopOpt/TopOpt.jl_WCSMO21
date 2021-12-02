@@ -1,3 +1,5 @@
+**NOTE: this repo is archived and the code is outdated. Please refer to the `test/wcsmo14` directory in the [TopOpt.jl](https://github.com/JuliaTopOpt/TopOpt.jl/tree/master/test/wcsmo14) repo for updated scripts.**
+
 # TopOpt.j benchmarks
 
 This repo constains benchmarks and demos for [TopOpt.jl](https://github.com/mohamed82008/TopOpt.jl), as supplementary materials for the abstract submitted to [WCSMO-14 (2021)](https://www.wcsmo14.org/).
